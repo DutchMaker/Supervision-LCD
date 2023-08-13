@@ -42,3 +42,5 @@ console.log(framebuffer.map((i) => i.toString(2)));
 for (let i = 0; i < 8; i++) {
     console.log((framebuffer[0] >> i) & 1);
 }   
+
+console.log(1 % 20);
