@@ -1,0 +1,22 @@
+No Crash Data To Report
+  Hopefully all is well, but certain types of crashes can't be reported:
+	stuck in an infinite loop (technically, hardware still running properly)
+	remaining in a low power sleep mode
+	access to certain peripherals without their clock enabled (eg, FlexIO)
+	change of CPU or bus clock speed without use of glitchless mux
+ILI9486 Initialized
+CMD: 0x4, SHIFT: 0x4 
+Dummy 0x0, data 0x0
+Manufacturer ID: 0x00
+CMD: 0xB, SHIFT: 0xB 
+Dummy 0x0, data 0x0
+MADCTL Mode: 0x00
+CMD: 0xC, SHIFT: 0xC 
+Dummy 0x0, data 0x1860000
+Pixel Format: 0x00
+CMD: 0xD, SHIFT: 0xD 
+Dummy 0x0, data 0x0
+Image Format: 0x00
+CMD: 0xF, SHIFT: 0xF 
+Dummy 0x0, data 0x0
+Self Diagnostic: Failed (0x00)

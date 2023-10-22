@@ -1,0 +1,13 @@
+SglBeatWR_nPrm_16 - CMD: 0x2C, SHIFT: 0x8C 
+SglBeatWR_nPrm_16 - CMD: 0x2C, SHIFT: 0x8C 
+SglBeatWR_nPrm_16 - CMD: 0x2C, SHIFT: 0x8C 
+SglBeatWR_nPrm_16 - CMD: 0x2C, SHIFT: 0x8C 
+SglBeatWR_nPrm_16 - CMD: 0x2C, SHIFT: 0x8C 
+SglBeatWR_nPrm_16 - CMD: 0x2C, SHIFT: 0x8C 
+SglBeatWR_nPrm_16 - CMD: 0x2C, SHIFT: 0x8C 
+SglBeatWR_nPrm_16 - CMD: 0x2C, SHIFT: 0x8C 
+SglBeatWR_nPrm_16 - CMD: 0x2C, SHIFT: 0x8C 
+SglBeatWR_nPrm_16 - CMD: 0x2C, SHIFT: 0x8C 
+SglBeatWR_nPrm_16 - CMD: 0x2C, SHIFT: 0x8C 
+SglBeatWR_nPrm_16 - CMD: 0x2C, SHIFT: 0x8C 
+SglBeatWR_nPrm_16 - CMD: 0x2C, SHIFT: 0x8C 

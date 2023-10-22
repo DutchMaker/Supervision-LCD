@@ -1,0 +1,17 @@
+CrashReport:
+  A problem occurred at (system time) 0:0:5
+  Code was executing from address 0x60001A36
+  CFSR: 82
+	(DACCVIOL) Data Access Violation
+	(MMARVALID) Accessed Address: 0x4949C7
+  Temperature inside the chip was 41.56 °C
+  Startup CPU clock speed is 600MHz
+Manufacturer ID: 0x00
+Module Version ID: 0x00
+Module ID: 0x00
+Display Power Mode: 0x00
+MADCTL Mode: 0x00
+Pixel Format: 0x00
+Image Format: 0x00
+Signal Mode: 0x00
+Self Diagnostic: Failed (0x00)

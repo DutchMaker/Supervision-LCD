@@ -1,0 +1,9 @@
+CrashReport:
+  A problem occurred at (system time) 19:36:43
+  Code was executing from address 0x60001A36
+  CFSR: 82
+	(DACCVIOL) Data Access Violation
+	(MMARVALID) Accessed Address: 0x4949C7
+  Temperature inside the chip was 49.09 °C
+  Startup CPU clock speed is 600MHz
+Check 1
