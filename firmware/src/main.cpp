@@ -1,235 +1,238 @@
-#include <Arduino.h>
+#include "Arduino.h"
 
-//#define INTERRUPT_PIN_CLOCK 2   // This pin is an OR of the pixel clock and line latch signals.
-                                // It will interrupt when pixel data is pushed and when a line is done.
+// IPS pins
+#define PIN_IPS_HSYNC 4
+#define PIN_IPS_VSYNC 7
+#define PIN_IPS_CLOCK 8
+#define PIN_IPS_DATA0 5
+#define PIN_IPS_DATA1 6
 
-// #define INTERRUPT_PIN_FP    3   // This pin is the frame polarity signal.
-//                                 // It will change when a frame field is starting.
+// Supervision pins
+#define PIN_SV_DATA0           22
+#define PIN_SV_DATA1           21
+#define PIN_SV_DATA2           20
+#define PIN_SV_DATA3           19
+#define PIN_SV_PIXEL_CLOCK     18
+#define PIN_SV_LINE_LATCH      17
+#define PIN_SV_FRAME_POLARITY  16
 
-#define PIN_DATA0           4
-#define PIN_DATA1           5
-#define PIN_DATA2           6
-#define PIN_DATA3           7
-#define PIN_PIXEL_CLOCK     8
-#define PIN_LINE_LATCH      9
-#define PIN_FRAME_POLARITY  10
-#define PIN_TEST            11
+IntervalTimer ips_hsyncTimer;
+IntervalTimer ips_vsyncTimer;
 
-void ISR_clock();
-void ISR_frame_polarity();
-void render_frame();
+uint8_t frameBuffer[160][144];
+volatile unsigned int ips_currentLine = 0;
+volatile unsigned int ips_currentPixel = 0;
 
-uint8_t framebuffer[2][(160/8)*(160/8)]; // Supervision renders the screen as 2 field of one-bit pixels, 160x160 pixels per field.
-uint8_t current_line = 0;
-uint8_t current_pixel = 0;
-uint8_t current_field = 0;
+bool sv_wait_for_new_field = true;
+int sv_pin_state_clock = 0;
+int sv_pin_state_line_latch = 0;
+int sv_pin_state_frame_polarity = -1;
+int sv_currentField = 0;
+int sv_currentLine = 0;
+bool sv_skip_line = false;
+int sv_currentPixel = 0;
+bool ips_rendering_frame = false;
 
-bool booting = true;
-bool halt = false;
-uint8_t first_frames_count = 0;
+void draw_test_screen();
+void render_ips_frame();
+void capture_sv_frame();
+void ips_hsync();
+void ips_vsync();
+void reset_state();
 
-int pin_state_pixel_clock = 0;
-int pin_state_line_latch = 0;
-int pin_state_frame_polarity = 0;
+//////////////////////////////////////////////////////////////////////////
+void setup() {
+  pinMode(PIN_IPS_HSYNC, OUTPUT);
+  pinMode(PIN_IPS_VSYNC, OUTPUT);
+  pinMode(PIN_IPS_CLOCK, OUTPUT);
+  pinMode(PIN_IPS_DATA0, OUTPUT);
+  pinMode(PIN_IPS_DATA1, OUTPUT);
 
-int count_cc = 0;
-int count_ll = 0;
-int count_fp = 0;
-int out = 0;
+  pinMode(PIN_SV_DATA0, INPUT);
+  pinMode(PIN_SV_DATA1, INPUT);
+  pinMode(PIN_SV_DATA2, INPUT);
+  pinMode(PIN_SV_DATA3, INPUT);
+  pinMode(PIN_SV_PIXEL_CLOCK, INPUT);
+  pinMode(PIN_SV_LINE_LATCH, INPUT);
+  pinMode(PIN_SV_FRAME_POLARITY, INPUT);
 
-void setup() 
-{
-  //pinMode(INTERRUPT_PIN_CLOCK, INPUT);
-  //pinMode(INTERRUPT_PIN_FP, INPUT_PULLUP);
-  pinMode(PIN_DATA0, INPUT);
-  pinMode(PIN_DATA1, INPUT);
-  pinMode(PIN_DATA2, INPUT);
-  pinMode(PIN_DATA3, INPUT);
-  pinMode(PIN_PIXEL_CLOCK, INPUT);
-  pinMode(PIN_LINE_LATCH, INPUT);
-  pinMode(PIN_FRAME_POLARITY, INPUT);
-  
-  pinMode(PIN_TEST, OUTPUT);
+  digitalWriteFast(PIN_IPS_HSYNC, LOW);
+  digitalWriteFast(PIN_IPS_VSYNC, LOW);
+  digitalWriteFast(PIN_IPS_CLOCK, LOW);
+  digitalWriteFast(PIN_IPS_DATA0, LOW);
+  digitalWriteFast(PIN_IPS_DATA1, LOW);
 
-  Serial.begin(9600);
-
-  Serial.println("Supervision custom LCD firmware started");
-  delay(1000);
-
-  //attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN_CLOCK), ISR_clock, RISING);
-  //attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN_FP), ISR_frame_polarity, CHANGE);
+  draw_test_screen();
 }
 
-long nothing = 0;
-
-void loop() 
-{
-  uint8_t pin_pixel_clock = (PIND & (1 << 2)) >> 2;
-  uint8_t pin_line_latch = (PIND & (1 << 3)) >> 3;
-  uint8_t pin_frame_polarity = (PIND & (1 << 4)) >> 4;
-
-  if ((pin_pixel_clock == LOW || pin_pixel_clock == pin_state_pixel_clock) && (pin_line_latch == LOW || pin_line_latch == pin_state_line_latch)) {
-    // No clock or line latch pulse, so nothing to do.
-    //return;
+//////////////////////////////////////////////////////////////////////////
+void loop() {
+  if (ips_rendering_frame) {
+    render_ips_frame();
   }
 
-  // if (booting) {
-  //   // Wait 50 frames before we start the rendering process.
-  //   if (pin_frame_polarity != pin_state_frame_polarity) {
-  //     first_frames_count++;
-  //   }
-
-  //   if (pin_frame_polarity == LOW && first_frames_count > 5) {
-  //     booting = false;
-  //   }
-  //   else {
-  //     pin_state_frame_polarity = pin_frame_polarity;
-  //     return;
-  //   }
-  // }
-
-  //PORTB |= (1 << 0);
-  //PORTB &= ~(1 << 0);
-  PORTB ^= (1 << 3);
-
-  // if (pin_pixel_clock == HIGH && pin_pixel_clock != pin_state_pixel_clock) {
-  //   count_cc++;
-  // }
-  // else if (pin_line_latch == HIGH && pin_line_latch != pin_state_line_latch) {
-  //   count_ll++;
-  // }
-
-  // //if (pin_frame_polarity == HIGH && pin_frame_polarity != pin_state_frame_polarity) {
-  // if (count_ll == 160) {
-  //   count_fp++;
-
-  //   Serial.print("nothing: ");
-  //   Serial.println(nothing);
-  //   Serial.print("cc: ");
-  //   Serial.println(count_cc);
-  //   Serial.print("ll: ");
-  //   Serial.println(count_ll);
-  //   Serial.print("fp: ");
-  //   Serial.println(count_fp);
-
-  //   halt = true;
-  // }
-
-  pin_state_pixel_clock = pin_pixel_clock;
-  pin_state_line_latch = pin_line_latch;
-  pin_state_frame_polarity = pin_frame_polarity;
+  capture_sv_frame();
 }
 
+//////////////////////////////////////////////////////////////////////////
+void draw_test_screen() {
+  for (int i = 0; i < 160; i++) {
+    for (int j = 0; j < 144; j++) {
+      frameBuffer[i][j] = LOW;
+      frameBuffer[i][j] = LOW;
+    }
+  }
 
+  // Draw a circle
+  int centerX = 80;
+  int centerY = 72;
+  int radius = 50;
+  for (int i = 0; i < 160; i++) {
+      for (int j = 0; j < 144; j++) {
+          if (sqrt(pow(i - centerX, 2) + pow(j - centerY, 2)) <= radius) {
+              frameBuffer[i][j] = HIGH;
+              frameBuffer[i][j] = HIGH;
+          }
+      }
+  }
+}
 
-// void ISR_clock()
-// {
-//   uint8_t fp = digitalRead(PIN_FRAME_POLARITY);
+//////////////////////////////////////////////////////////////////////////
+void render_ips_frame() {
+  if (ips_currentPixel >= 160) {
+    return;
+  }
 
-//   // Wait for a couple of frames before we start rendering.
-//   if (booting) {
+  digitalWriteFast(PIN_IPS_CLOCK, HIGH);
+  digitalWriteFast(PIN_IPS_DATA0, frameBuffer[ips_currentPixel][ips_currentLine] & 1);
+  digitalWriteFast(PIN_IPS_DATA1, (frameBuffer[ips_currentPixel][ips_currentLine] >> 1) & 1);
+  digitalWriteFast(PIN_IPS_CLOCK, LOW);
+  ips_currentPixel++;
 
-//     if (fp != frame_polarity) {
-//       frame_polarity = fp;
-//       first_frames++;
-//     }
+  // We cannot process SV screen data and render the IPS at the same time as the CPU is not fast enough.
+  return;
+}
 
-//     if (fp && first_frames > 5) {
-//       booting = false;
-//     }
-//     else {
-//       return;
-//     }
-//   }
+//////////////////////////////////////////////////////////////////////////
+void capture_sv_frame() {
+  uint8_t sv_pixel_clock = digitalReadFast(PIN_SV_PIXEL_CLOCK);
+  uint8_t sv_line_latch = digitalReadFast(PIN_SV_LINE_LATCH);
+  uint8_t sv_frame_polarity = digitalReadFast(PIN_SV_FRAME_POLARITY);
 
-//   cc++;
+  // Wait for frame polarity to go transition from low to high for the first time.
+  if (sv_wait_for_new_field) {
+    if (sv_pin_state_frame_polarity == -1 && sv_frame_polarity == LOW) {
+      sv_pin_state_frame_polarity = 0;
+      return;
+    }
+    else if (sv_pin_state_frame_polarity == 0 && sv_frame_polarity == HIGH) {
+      sv_pin_state_frame_polarity = 1;
+      sv_wait_for_new_field = false;
+    }
+    else {
+      return;
+    }
+  }
 
-//   if (fp != frame_polarity) {
-//     frame_polarity = fp;
-//     field = !frame_polarity;
-//     line = 0;
-//     pixel = 0;
+  if (sv_pixel_clock == HIGH && sv_pin_state_clock != sv_pixel_clock) {
+    // Pixel clock transitioned from low to high.
+    if (sv_currentPixel < 160 - 3 && !sv_skip_line) {
+      if (sv_currentField == 0) {
+        frameBuffer[sv_currentPixel++][sv_currentLine] = digitalReadFast(PIN_SV_DATA0);
+        frameBuffer[sv_currentPixel++][sv_currentLine] = digitalReadFast(PIN_SV_DATA1);
+        frameBuffer[sv_currentPixel++][sv_currentLine] = digitalReadFast(PIN_SV_DATA2);
+        frameBuffer[sv_currentPixel++][sv_currentLine] = digitalReadFast(PIN_SV_DATA3);
+      }
+      else {
+        frameBuffer[sv_currentPixel++][sv_currentLine] |= digitalReadFast(PIN_SV_DATA0) << 1;
+        frameBuffer[sv_currentPixel++][sv_currentLine] |= digitalReadFast(PIN_SV_DATA1) << 1;
+        frameBuffer[sv_currentPixel++][sv_currentLine] |= digitalReadFast(PIN_SV_DATA2) << 1;
+        frameBuffer[sv_currentPixel++][sv_currentLine] |= digitalReadFast(PIN_SV_DATA3) << 1;
+      }
+    }
+  }
+  else if (sv_line_latch == HIGH && sv_pin_state_line_latch != sv_line_latch) {
+    // Line latch transitioned from low to high.
+    if (sv_currentLine % 10 == 0 && !sv_skip_line) {  
+      // Skip every 10th line. SuperVision has 160 lines, the IPS has 144.
+      sv_skip_line = true;
+      return;
+    }
 
-//     fc++;
+    sv_skip_line = false;
+    
+    if (sv_currentLine < 159) {
+      sv_currentLine++;
+      sv_currentPixel = 0;
+    }
+    else {
+      sv_currentPixel = 0;
+    }
+  }
 
-//     if (!field) {
-//       render_frame();
-//     }
-//   }
+  if (sv_frame_polarity == HIGH && sv_pin_state_frame_polarity != sv_frame_polarity) {
+    // Frame polarity transitioned from low to high.
+    sv_currentField = 0;
+    sv_currentLine = 0;
+    sv_currentPixel = 0;
 
-//   if (digitalRead(PIN_PIXEL_CLOCK) == HIGH)
-//   {
-//     fpc++;
+    // Start the timers to render the IPS screen.
+    ips_rendering_frame = true;
+    ips_hsyncTimer.begin(ips_hsync, 108);
+    ips_vsyncTimer.begin(ips_vsync, 16666);
 
-//     // Store the pixel data.
-//     framebuffer[field][line*20 + pixel/8] |= (digitalRead(PIN_DATA0) << (pixel % 8));
-//     framebuffer[field][line*20 + pixel/8] |= (digitalRead(PIN_DATA1) << (pixel % 8 + 1));
-//     framebuffer[field][line*20 + pixel/8] |= (digitalRead(PIN_DATA2) << (pixel % 8 + 2));
-//     framebuffer[field][line*20 + pixel/8] |= (digitalRead(PIN_DATA3) << (pixel % 8 + 3));
-//     pixel += 4;
-//   }
+    return;
+  }
+  else if (sv_frame_polarity == LOW && sv_pin_state_frame_polarity != sv_frame_polarity) {
+    // Frame polarity transitioned from high to low.
+    sv_currentField = 1;
+    sv_currentLine = 0;
+    sv_currentPixel = 0;
+  }
 
-//   if (digitalRead(PIN_LINE_LATCH) == HIGH)
-//   {
-//     llc++;
+  sv_pin_state_clock = sv_pixel_clock;
+  sv_pin_state_line_latch = sv_line_latch;
+  sv_pin_state_frame_polarity = sv_frame_polarity;
+}
 
-//     // Store the line data.
-//     line++;
-//     pixel = 0;
-//   }
-// }
+//////////////////////////////////////////////////////////////////////////
+void ips_hsync() {
+  if (ips_currentLine == 144) {
+    return;
+  }
 
-// void render_frame()
-// {
-//   // Temporarily detach interrupts to stop processing after one frame.
-//   detachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN_CLOCK));
-  
-//   Serial.println("Rendering");
-//   Serial.println(cc);
-//   Serial.println(fc);
-//   Serial.println(fpc);
-//   Serial.println(llc);
+  digitalWriteFast(PIN_IPS_HSYNC, HIGH);
+  delayNanoseconds(300);
+  digitalWriteFast(PIN_IPS_HSYNC, LOW);
 
-//   // For now, just print the frame to the serial port.
-//   for (int i = 0; i < (160/8)*(160/8); i++)
-//   {
-//     if (i % (160/8) == 0) {
-//       Serial.write('\n');
-//     }
+  ips_currentLine++;
+  ips_currentPixel = 0;
+}
 
-//     Serial.print(framebuffer[0][i], HEX);
-//     Serial.print(' ');
-//     // for (uint8_t j = 0; j < 8; j++)
-//     // {
-//     //   uint8_t bit1 = (framebuffer[0][i] >> j) & 1;
-//     //   uint8_t bit2 = (framebuffer[1][i] >> j) & 1;
-//     //   uint8_t pixel_type = 0;
+//////////////////////////////////////////////////////////////////////////
+void ips_vsync() {
+  digitalWriteFast(PIN_IPS_VSYNC, HIGH);
+  delayNanoseconds(300);
+  digitalWriteFast(PIN_IPS_VSYNC, LOW);
 
-//     //   if (bit1 == 0 && bit2 == 1) {
-//     //     pixel_type = 1; // 1/3rd darkness
-//     //   }
-//     //   else if (bit1 == 1 && bit2 == 0) {
-//     //     pixel_type = 1; // 2/3rd darkness
-//     //   }
-//     //   else if (bit1 == 1 && bit2 == 1) {
-//     //     pixel_type = 3; // fully on
-//     //   }
+  ips_hsyncTimer.end();
+  ips_vsyncTimer.end();
 
-//     //   switch (pixel_type)
-//     //   {
-//     //     case 0:
-//     //       Serial.write(' ');
-//     //       break;
-//     //     case 1:
-//     //       Serial.write('O');
-//     //       break;
-//     //     case 2:
-//     //       Serial.write('0');
-//     //       break;
-//     //     case 3:
-//     //       Serial.write('@');
-//     //       break;
-//     //   }
-//     // }    
-//   }
-// }
+  reset_state();
+}
+
+//////////////////////////////////////////////////////////////////////////
+void reset_state() {
+  sv_wait_for_new_field = true;
+  sv_pin_state_clock = 0;
+  sv_pin_state_line_latch = 0;
+  sv_pin_state_frame_polarity = -1;
+  sv_currentField = 0;
+  sv_currentLine = 0;
+  sv_skip_line = false;
+  sv_currentPixel = 0;
+
+  ips_rendering_frame = false;
+  ips_currentLine = 0;
+  ips_currentPixel = 0;
+}

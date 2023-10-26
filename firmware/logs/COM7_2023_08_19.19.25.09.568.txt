@@ -1,9 +1,0 @@
-No Crash Data To Report
-  Hopefully all is well, but certain types of crashes can't be reported:
-	stuck in an infinite loop (technically, hardware still running properly)
-	remaining in a low power sleep mode
-	access to certain peripherals without their clock enabled (eg, FlexIO)
-	change of CPU or bus clock speed without use of glitchless mux
-  Breadcrumb #3 was 4241740764 (0xFCD3D3DC)
-  Breadcrumb #4 was 157570285 (0x96454ED)
-  Breadcrumb #6 was 1129911394 (0x43591462)
