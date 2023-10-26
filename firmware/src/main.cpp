@@ -1,5 +1,7 @@
 #include "Arduino.h"
 
+#define DEBUG false
+
 // IPS pins
 #define PIN_IPS_HSYNC 4
 #define PIN_IPS_VSYNC 7
@@ -28,11 +30,11 @@ uint8_t frameBuffer[160][144];
 volatile unsigned int ips_currentLine = 0;
 volatile unsigned int ips_currentPixel = 0;
 
-bool sv_wait_for_new_field = true;
+bool sv_wait_for_first_field = true;
 int sv_pin_state_clock = 0;
 int sv_pin_state_line_latch = 0;
 int sv_pin_state_frame_polarity = -1;
-int sv_currentField = 0;
+volatile int sv_currentField = 0;
 int sv_currentLine = 0;
 bool sv_skip_line = false;
 int sv_currentPixel = 0;
@@ -43,6 +45,8 @@ void render_ips_frame();
 void capture_sv_frame();
 void ips_hsync();
 void ips_vsync();
+void sv_lineLatch();
+void sv_framePolarity();
 void reset_state();
 
 //////////////////////////////////////////////////////////////////////////
@@ -75,7 +79,12 @@ void setup() {
   digitalWriteFast(PIN_TEST_SV_LINE_LATCH, LOW);
   digitalWriteFast(PIN_TEST_SV_FRAME_POLARITY, LOW);
 
+  attachInterrupt(digitalPinToInterrupt(PIN_SV_FRAME_POLARITY), sv_framePolarity, CHANGE);
+
   draw_test_screen();
+
+  ips_hsyncTimer.begin(ips_hsync, 108);
+  ips_vsyncTimer.begin(ips_vsync, 16666);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -128,24 +137,13 @@ void render_ips_frame() {
 
 //////////////////////////////////////////////////////////////////////////
 void capture_sv_frame() {
+  // Wait for frame polarity to go transition from low to high for the first time.
+  if (sv_wait_for_first_field) {
+      return;
+  }
+
   uint8_t sv_pixel_clock = digitalReadFast(PIN_SV_PIXEL_CLOCK);
   uint8_t sv_line_latch = digitalReadFast(PIN_SV_LINE_LATCH);
-  uint8_t sv_frame_polarity = digitalReadFast(PIN_SV_FRAME_POLARITY);
-
-  // Wait for frame polarity to go transition from low to high for the first time.
-  if (sv_wait_for_new_field) {
-    if (sv_pin_state_frame_polarity == -1 && sv_frame_polarity == LOW) {
-      sv_pin_state_frame_polarity = 0;
-      return;
-    }
-    else if (sv_pin_state_frame_polarity == 0 && sv_frame_polarity == HIGH) {
-      sv_pin_state_frame_polarity = 1;
-      sv_wait_for_new_field = false;
-    }
-    else {
-      return;
-    }
-  }
 
   if (sv_pixel_clock == HIGH && sv_pin_state_clock != sv_pixel_clock) {
     // Pixel clock transitioned from low to high.
@@ -167,6 +165,11 @@ void capture_sv_frame() {
   else if (sv_line_latch == HIGH && sv_pin_state_line_latch != sv_line_latch) {
     // Line latch transitioned from low to high.
     if (sv_currentLine % 10 == 0 && !sv_skip_line) {  
+      
+      #if DEBUG
+      digitalWriteFast(PIN_TEST_SV_LINE_LATCH, sv_line_latch);
+      #endif
+
       // Skip every 10th line. SuperVision has 160 lines, the IPS has 144.
       sv_skip_line = true;
       return;
@@ -183,43 +186,53 @@ void capture_sv_frame() {
     }
   }
 
-  if (sv_frame_polarity == HIGH && sv_pin_state_frame_polarity != sv_frame_polarity) {
-    // Frame polarity transitioned from low to high.
-    sv_currentField = 0;
-    sv_currentLine = 0;
-    sv_currentPixel = 0;
-
-    // Start the timers to render the IPS screen.
-    ips_rendering_frame = true;
-    ips_hsyncTimer.begin(ips_hsync, 108);
-    ips_vsyncTimer.begin(ips_vsync, 16666);
-
-    return;
-  }
-  else if (sv_frame_polarity == LOW && sv_pin_state_frame_polarity != sv_frame_polarity) {
-    // Frame polarity transitioned from high to low.
-    sv_currentField = 1;
-    sv_currentLine = 0;
-    sv_currentPixel = 0;
-  }
-
   sv_pin_state_clock = sv_pixel_clock;
   sv_pin_state_line_latch = sv_line_latch;
-  sv_pin_state_frame_polarity = sv_frame_polarity;
 
+  #if DEBUG
   digitalWriteFast(PIN_TEST_SV_PIXEL_CLOCK, sv_pixel_clock);
   digitalWriteFast(PIN_TEST_SV_LINE_LATCH, sv_line_latch);
-  digitalWriteFast(PIN_TEST_SV_FRAME_POLARITY, sv_frame_polarity);
+  #endif
+}
+
+//////////////////////////////////////////////////////////////////////////
+void sv_framePolarity() {
+  if (ips_rendering_frame) {
+    return;
+  }
+
+  sv_currentField = !digitalReadFast(PIN_SV_FRAME_POLARITY);
+  sv_currentLine = 0;
+  sv_currentPixel = 0;
+
+  #if DEBUG
+  digitalWriteFast(PIN_TEST_SV_FRAME_POLARITY, !sv_currentField);
+  #endif
+
+  if (sv_wait_for_first_field && sv_currentField == 0) {
+    sv_wait_for_first_field = false;
+    return;
+  }
+
+  // First and second field captured.
+  // Start rendering the IPS screen.
+  if (sv_currentField == 0) {
+    ips_rendering_frame = true;
+  }
 }
 
 //////////////////////////////////////////////////////////////////////////
 void ips_hsync() {
+  if (!ips_rendering_frame) {
+    return; 
+  }
+
   if (ips_currentLine == 144) {
     return;
   }
 
   digitalWriteFast(PIN_IPS_HSYNC, HIGH);
-  delayNanoseconds(300);
+  delayNanoseconds(200);
   digitalWriteFast(PIN_IPS_HSYNC, LOW);
 
   ips_currentLine++;
@@ -228,19 +241,20 @@ void ips_hsync() {
 
 //////////////////////////////////////////////////////////////////////////
 void ips_vsync() {
-  digitalWriteFast(PIN_IPS_VSYNC, HIGH);
-  delayNanoseconds(300);
-  digitalWriteFast(PIN_IPS_VSYNC, LOW);
+  if (!ips_rendering_frame) {
+    return; 
+  }
 
-  ips_hsyncTimer.end();
-  ips_vsyncTimer.end();
+  digitalWriteFast(PIN_IPS_VSYNC, HIGH);
+  delayNanoseconds(200);
+  digitalWriteFast(PIN_IPS_VSYNC, LOW);
 
   reset_state();
 }
 
 //////////////////////////////////////////////////////////////////////////
 void reset_state() {
-  sv_wait_for_new_field = true;
+  sv_wait_for_first_field = true;
   sv_pin_state_clock = 0;
   sv_pin_state_line_latch = 0;
   sv_pin_state_frame_polarity = -1;
