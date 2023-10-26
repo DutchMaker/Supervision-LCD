@@ -69,6 +69,7 @@ void setup() {
 void loop() {
   if (ips_rendering_frame) {
     render_ips_frame();
+    return; // We cannot process SV screen data and render the IPS at the same time as the CPU is not fast enough.
   }
 
   capture_sv_frame();
@@ -108,9 +109,6 @@ void render_ips_frame() {
   digitalWriteFast(PIN_IPS_DATA1, (frameBuffer[ips_currentPixel][ips_currentLine] >> 1) & 1);
   digitalWriteFast(PIN_IPS_CLOCK, LOW);
   ips_currentPixel++;
-
-  // We cannot process SV screen data and render the IPS at the same time as the CPU is not fast enough.
-  return;
 }
 
 //////////////////////////////////////////////////////////////////////////
