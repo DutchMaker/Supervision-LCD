@@ -16,6 +16,11 @@
 #define PIN_SV_LINE_LATCH      17
 #define PIN_SV_FRAME_POLARITY  16
 
+// Test pins
+#define PIN_TEST_SV_PIXEL_CLOCK  15
+#define PIN_TEST_SV_LINE_LATCH   14
+#define PIN_TEST_SV_FRAME_POLARITY  13
+
 IntervalTimer ips_hsyncTimer;
 IntervalTimer ips_vsyncTimer;
 
@@ -56,11 +61,19 @@ void setup() {
   pinMode(PIN_SV_LINE_LATCH, INPUT);
   pinMode(PIN_SV_FRAME_POLARITY, INPUT);
 
+  pinMode(PIN_TEST_SV_PIXEL_CLOCK, OUTPUT);
+  pinMode(PIN_TEST_SV_LINE_LATCH, OUTPUT);
+  pinMode(PIN_TEST_SV_FRAME_POLARITY, OUTPUT);
+
   digitalWriteFast(PIN_IPS_HSYNC, LOW);
   digitalWriteFast(PIN_IPS_VSYNC, LOW);
   digitalWriteFast(PIN_IPS_CLOCK, LOW);
   digitalWriteFast(PIN_IPS_DATA0, LOW);
   digitalWriteFast(PIN_IPS_DATA1, LOW);
+
+  digitalWriteFast(PIN_TEST_SV_PIXEL_CLOCK, LOW);
+  digitalWriteFast(PIN_TEST_SV_LINE_LATCH, LOW);
+  digitalWriteFast(PIN_TEST_SV_FRAME_POLARITY, LOW);
 
   draw_test_screen();
 }
@@ -105,8 +118,10 @@ void render_ips_frame() {
   }
 
   digitalWriteFast(PIN_IPS_CLOCK, HIGH);
+  delayNanoseconds(5);
   digitalWriteFast(PIN_IPS_DATA0, frameBuffer[ips_currentPixel][ips_currentLine] & 1);
   digitalWriteFast(PIN_IPS_DATA1, (frameBuffer[ips_currentPixel][ips_currentLine] >> 1) & 1);
+  delayNanoseconds(5);
   digitalWriteFast(PIN_IPS_CLOCK, LOW);
   ips_currentPixel++;
 }
@@ -191,6 +206,10 @@ void capture_sv_frame() {
   sv_pin_state_clock = sv_pixel_clock;
   sv_pin_state_line_latch = sv_line_latch;
   sv_pin_state_frame_polarity = sv_frame_polarity;
+
+  digitalWriteFast(PIN_TEST_SV_PIXEL_CLOCK, sv_pixel_clock);
+  digitalWriteFast(PIN_TEST_SV_LINE_LATCH, sv_line_latch);
+  digitalWriteFast(PIN_TEST_SV_FRAME_POLARITY, sv_frame_polarity);
 }
 
 //////////////////////////////////////////////////////////////////////////
