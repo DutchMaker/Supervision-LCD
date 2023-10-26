@@ -27,12 +27,11 @@ IntervalTimer ips_vsyncTimer;
 uint8_t frameBuffer[2][160][144];
 volatile unsigned int ips_currentLine = 0;
 volatile unsigned int ips_currentPixel = 0;
-volatile bool ips_vsync_done = false;
 
 volatile unsigned int ips_frameBuffer = 0;
 volatile unsigned int sv_frameBuffer = 0; //1;
 
-bool sv_booting = true;
+bool sv_wait_for_new_field = true;
 int sv_pin_state_clock = 0;
 int sv_pin_state_line_latch = 0;
 int sv_pin_state_frame_polarity = -1;
@@ -40,12 +39,11 @@ int sv_currentField = 0;
 int sv_currentLine = 0;
 bool sv_skip_line = false;
 int sv_currentPixel = 0;
-bool sv_waiting_for_ips_vsync = false;
-
-int captured_frames = 0;
+bool ips_rendering_frame = false;
 
 void ips_hsync();
 void ips_vsync();
+void reset_state();
 
 void setup() {
   pinMode(PIN_IPS_HSYNC, OUTPUT);
@@ -96,126 +94,112 @@ void setup() {
       }
   }
 
-  ips_hsyncTimer.begin(ips_hsync, 108);
-  ips_vsyncTimer.begin(ips_vsync, 16666);
+  // ips_hsyncTimer.begin(ips_hsync, 108);
+  // ips_vsyncTimer.begin(ips_vsync, 16666);
 }
 
 void loop() {
   ////////////////////////////////////////
-  // Capture data from the SuperVision. //
-  ////////////////////////////////////////
-  // if (captured_frames < 100) {
-  //   uint8_t sv_pixel_clock = digitalReadFast(PIN_SV_PIXEL_CLOCK);
-  //   uint8_t sv_line_latch = digitalReadFast(PIN_SV_LINE_LATCH);
-  //   uint8_t sv_frame_polarity = digitalReadFast(PIN_SV_FRAME_POLARITY);
-
-  //   // Wait for frame polarity to go transition from low to high for the first time.
-  //   if (sv_booting) {
-  //     if (sv_pin_state_frame_polarity == -1 && sv_frame_polarity == LOW) {
-  //       sv_pin_state_frame_polarity = 0;
-  //       return;
-  //     }
-  //     else if (sv_pin_state_frame_polarity == 0 && sv_frame_polarity == HIGH) {
-  //       sv_pin_state_frame_polarity = 1;
-  //       sv_booting = false;
-  //     }
-  //     else {
-  //       return;
-  //     }
-  //   }
-
-  //   if (sv_pixel_clock == HIGH && sv_pin_state_clock != sv_pixel_clock) {
-  //     // Pixel clock transitioned from low to high.
-  //     if (sv_currentPixel < 160 - 3 && !sv_skip_line) {
-  //       if (sv_currentField == 0) {
-  //         frameBuffer[sv_frameBuffer][sv_currentPixel++][sv_currentLine] = digitalReadFast(PIN_SV_DATA0);
-  //         frameBuffer[sv_frameBuffer][sv_currentPixel++][sv_currentLine] = digitalReadFast(PIN_SV_DATA1);
-  //         frameBuffer[sv_frameBuffer][sv_currentPixel++][sv_currentLine] = digitalReadFast(PIN_SV_DATA2);
-  //         frameBuffer[sv_frameBuffer][sv_currentPixel++][sv_currentLine] = digitalReadFast(PIN_SV_DATA3);
-  //       }
-  //       else {
-  //         // TODO: Process 2nd frame field.
-  //         // Now it just overwrites but it should combine the existing and new pixel values.
-  //         // frameBuffer[sv_frameBuffer][sv_currentPixel++][sv_currentLine] |= digitalReadFast(PIN_SV_DATA0) << 1;
-  //         // frameBuffer[sv_frameBuffer][sv_currentPixel++][sv_currentLine] |= digitalReadFast(PIN_SV_DATA1) << 1;
-  //         // frameBuffer[sv_frameBuffer][sv_currentPixel++][sv_currentLine] |= digitalReadFast(PIN_SV_DATA2) << 1;
-  //         // frameBuffer[sv_frameBuffer][sv_currentPixel++][sv_currentLine] |= digitalReadFast(PIN_SV_DATA3) << 1;
-  //       }
-  //     }
-  //   }
-  //   else if (sv_line_latch == HIGH && sv_pin_state_line_latch != sv_line_latch) {
-  //     // Line latch transitioned from low to high.
-  //     if (sv_currentLine % 10 == 0 && !sv_skip_line) {  
-  //       // Skip every 10th line. SuperVision has 160 lines, the IPS has 144.
-  //       sv_skip_line = true;
-  //       return;
-  //     }
-
-  //     sv_skip_line = false;
-      
-  //     if (sv_currentLine < 159) {
-  //       sv_currentLine++;
-  //       sv_currentPixel = 0;
-  //     }
-  //     else {
-  //       sv_currentPixel = 0;
-  //     }
-  //   }
-
-  //   if (sv_frame_polarity == HIGH && sv_pin_state_frame_polarity != sv_frame_polarity) {
-  //     // Frame polarity transitioned from low to high.
-  //     sv_currentField = 0;
-  //     sv_waiting_for_ips_vsync = true;
-  //     ips_vsync_done = false;
-  //   }
-  //   else if (sv_frame_polarity == LOW && sv_pin_state_frame_polarity != sv_frame_polarity) {
-  //     // Frame polarity transitioned from high to low.
-  //     sv_currentField = 1;
-  //     sv_currentLine = 0;
-  //     sv_currentPixel = 0;
-  //   }
-
-  //   if (sv_waiting_for_ips_vsync && ips_vsync_done) {
-  //     sv_waiting_for_ips_vsync = false;
-
-  //     sv_currentLine = 0;
-  //     sv_currentPixel = 0;
-
-  //     captured_frames++;
-
-  //     // Switch the framebuffers.
-  //     // TODO: This causes a crash of the Teensy.
-  //     // if (ips_frameBuffer == 0) {
-  //     //   ips_frameBuffer = 1;
-  //     //   sv_frameBuffer = 0;
-  //     // }
-  //     // else {
-  //     //   ips_frameBuffer = 0;
-  //     //   sv_frameBuffer = 1;
-  //     // }
-  //   }
-
-  //   sv_pin_state_clock = sv_pixel_clock;
-  //   sv_pin_state_line_latch = sv_line_latch;
-  //   sv_pin_state_frame_polarity = sv_frame_polarity;
-
-  //   digitalWriteFast(PIN_TEST_SV_PIXEL_CLOCK, sv_pin_state_clock);
-  //   digitalWriteFast(PIN_TEST_SV_LINE_LATCH, sv_pin_state_line_latch);
-  //   digitalWriteFast(PIN_TEST_SV_FRAME_POLARITY, sv_pin_state_frame_polarity);
-  // }
-  
-  ////////////////////////////////////////
   // Write data to the IPS screen.      //
   ////////////////////////////////////////
-  if (ips_currentPixel >= 160) {
+  if (ips_rendering_frame) {
+    if (ips_currentPixel >= 160) {
+      return;
+    }
+
+    digitalWriteFast(PIN_IPS_CLOCK, HIGH);
+    digitalWriteFast(PIN_IPS_DATA0, frameBuffer[ips_frameBuffer][ips_currentPixel][ips_currentLine]);
+    digitalWriteFast(PIN_IPS_DATA1, frameBuffer[ips_frameBuffer][ips_currentPixel][ips_currentLine]);
+    digitalWriteFast(PIN_IPS_CLOCK, LOW);
+    ips_currentPixel++;
+
+    // We cannot process SV screen data and render the IPS at the same time as the CPU is not fast enough.
     return;
   }
 
-  digitalWriteFast(PIN_IPS_CLOCK, HIGH);
-  digitalWriteFast(PIN_IPS_DATA0, frameBuffer[ips_frameBuffer][ips_currentPixel][ips_currentLine]);
-  digitalWriteFast(PIN_IPS_DATA1, frameBuffer[ips_frameBuffer][ips_currentPixel][ips_currentLine]);
-  digitalWriteFast(PIN_IPS_CLOCK, LOW);
-  ips_currentPixel++;
+  ////////////////////////////////////////
+  // Capture data from the SuperVision. //
+  ////////////////////////////////////////
+  uint8_t sv_pixel_clock = digitalReadFast(PIN_SV_PIXEL_CLOCK);
+  uint8_t sv_line_latch = digitalReadFast(PIN_SV_LINE_LATCH);
+  uint8_t sv_frame_polarity = digitalReadFast(PIN_SV_FRAME_POLARITY);
+
+  // Wait for frame polarity to go transition from low to high for the first time.
+  if (sv_wait_for_new_field) {
+    if (sv_pin_state_frame_polarity == -1 && sv_frame_polarity == LOW) {
+      sv_pin_state_frame_polarity = 0;
+      return;
+    }
+    else if (sv_pin_state_frame_polarity == 0 && sv_frame_polarity == HIGH) {
+      sv_pin_state_frame_polarity = 1;
+      sv_wait_for_new_field = false;
+    }
+    else {
+      return;
+    }
+  }
+
+  if (sv_pixel_clock == HIGH && sv_pin_state_clock != sv_pixel_clock) {
+    // Pixel clock transitioned from low to high.
+    if (sv_currentPixel < 160 - 3 && !sv_skip_line) {
+      if (sv_currentField == 0) {
+        frameBuffer[sv_frameBuffer][sv_currentPixel++][sv_currentLine] = digitalReadFast(PIN_SV_DATA0);
+        frameBuffer[sv_frameBuffer][sv_currentPixel++][sv_currentLine] = digitalReadFast(PIN_SV_DATA1);
+        frameBuffer[sv_frameBuffer][sv_currentPixel++][sv_currentLine] = digitalReadFast(PIN_SV_DATA2);
+        frameBuffer[sv_frameBuffer][sv_currentPixel++][sv_currentLine] = digitalReadFast(PIN_SV_DATA3);
+      }
+      else {
+        // TODO: Process 2nd frame field.
+        // Now it just overwrites but it should combine the existing and new pixel values.
+        // frameBuffer[sv_frameBuffer][sv_currentPixel++][sv_currentLine] |= digitalReadFast(PIN_SV_DATA0); // << 1;
+        // frameBuffer[sv_frameBuffer][sv_currentPixel++][sv_currentLine] |= digitalReadFast(PIN_SV_DATA1); // << 1;
+        // frameBuffer[sv_frameBuffer][sv_currentPixel++][sv_currentLine] |= digitalReadFast(PIN_SV_DATA2); // << 1;
+        // frameBuffer[sv_frameBuffer][sv_currentPixel++][sv_currentLine] |= digitalReadFast(PIN_SV_DATA3); // << 1;
+      }
+    }
+  }
+  else if (sv_line_latch == HIGH && sv_pin_state_line_latch != sv_line_latch) {
+    // Line latch transitioned from low to high.
+    if (sv_currentLine % 10 == 0 && !sv_skip_line) {  
+      // Skip every 10th line. SuperVision has 160 lines, the IPS has 144.
+      sv_skip_line = true;
+      return;
+    }
+
+    sv_skip_line = false;
+    
+    if (sv_currentLine < 159) {
+      sv_currentLine++;
+      sv_currentPixel = 0;
+    }
+    else {
+      sv_currentPixel = 0;
+    }
+  }
+
+  if (sv_frame_polarity == HIGH && sv_pin_state_frame_polarity != sv_frame_polarity) {
+    // Frame polarity transitioned from low to high.
+    sv_currentField = 0;
+    sv_currentLine = 0;
+    sv_currentPixel = 0;
+
+    // Start the timers to render the IPS screen.
+    ips_rendering_frame = true;
+    ips_hsyncTimer.begin(ips_hsync, 108);
+    ips_vsyncTimer.begin(ips_vsync, 16666);
+
+    return;
+  }
+  else if (sv_frame_polarity == LOW && sv_pin_state_frame_polarity != sv_frame_polarity) {
+    // Frame polarity transitioned from high to low.
+    sv_currentField = 1;
+    sv_currentLine = 0;
+    sv_currentPixel = 0;
+  }
+
+  sv_pin_state_clock = sv_pixel_clock;
+  sv_pin_state_line_latch = sv_line_latch;
+  sv_pin_state_frame_polarity = sv_frame_polarity;
 }
 
 void ips_hsync() {
@@ -235,14 +219,24 @@ void ips_vsync() {
   digitalWriteFast(PIN_IPS_VSYNC, HIGH);
   delayNanoseconds(300);
   digitalWriteFast(PIN_IPS_VSYNC, LOW);
-  
+
   ips_hsyncTimer.end();
   ips_vsyncTimer.end();
-  ips_hsyncTimer.begin(ips_hsync, 108);
-  ips_vsyncTimer.begin(ips_vsync, 16666);
 
+  reset_state();
+}
+
+void reset_state() {
+  sv_wait_for_new_field = true;
+  sv_pin_state_clock = 0;
+  sv_pin_state_line_latch = 0;
+  sv_pin_state_frame_polarity = -1;
+  sv_currentField = 0;
+  sv_currentLine = 0;
+  sv_skip_line = false;
+  sv_currentPixel = 0;
+
+  ips_rendering_frame = false;
   ips_currentLine = 0;
   ips_currentPixel = 0;
-
-  ips_vsync_done = true;
 }
