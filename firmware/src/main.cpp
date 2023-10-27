@@ -21,6 +21,8 @@
 #define PIN_TEST_SV_LINE_LATCH   14
 #define PIN_TEST_SV_FRAME_POLARITY  13
 
+#define RENDER_FRAME_NUMBER 5
+
 IntervalTimer ips_hsyncTimer;
 IntervalTimer ips_vsyncTimer;
 
@@ -150,8 +152,8 @@ void render_ips_frame() {
 
   digitalWriteFast(PIN_IPS_CLOCK, HIGH);
   delayNanoseconds(5);
-  digitalWriteFast(PIN_IPS_DATA0, frameBuffer[ips_currentPixel][ips_currentLine] & 1);
-  digitalWriteFast(PIN_IPS_DATA1, (frameBuffer[ips_currentPixel][ips_currentLine] >> 1) & 1);
+  digitalWriteFast(PIN_IPS_DATA1, frameBuffer[ips_currentPixel][ips_currentLine] & 1);
+  digitalWriteFast(PIN_IPS_DATA0, (frameBuffer[ips_currentPixel][ips_currentLine] >> 1) & 1);
   delayNanoseconds(5);
   digitalWriteFast(PIN_IPS_CLOCK, LOW);
   delayNanoseconds(5);
@@ -180,7 +182,19 @@ void capture_sv_frame() {
     }
   }
 
-  if (sv_pixel_clock == HIGH && sv_pin_state_clock != sv_pixel_clock) {
+  if (sv_line_latch == HIGH && sv_pin_state_line_latch != sv_line_latch) {
+    // Line latch transitioned from low to high.
+    if (sv_currentLine % 10 == 0 && !sv_skip_line) {  
+      // Skip every 10th line. SuperVision has 160 lines, the IPS has 144.
+      sv_skip_line = true;
+    }
+    else {
+      sv_skip_line = false;    
+      sv_currentLine++;
+      sv_currentPixel = 0;
+    }
+  }
+  else if (sv_pixel_clock == HIGH && sv_pin_state_clock != sv_pixel_clock) {
     // Pixel clock transitioned from low to high.
     if (sv_currentPixel < 157 && !sv_skip_line && sv_currentLine < 144) {
       if (sv_currentField == 0) {
@@ -195,18 +209,6 @@ void capture_sv_frame() {
         frameBuffer[sv_currentPixel++][sv_currentLine] |= digitalReadFast(PIN_SV_DATA2) << 1;
         frameBuffer[sv_currentPixel++][sv_currentLine] |= digitalReadFast(PIN_SV_DATA3) << 1;
       }
-    }
-  }
-  else if (sv_line_latch == HIGH && sv_pin_state_line_latch != sv_line_latch) {
-    // Line latch transitioned from low to high.
-    if (sv_currentLine % 10 == 0 && !sv_skip_line) {  
-      // Skip every 10th line. SuperVision has 160 lines, the IPS has 144.
-      sv_skip_line = true;
-    }
-    else {
-      sv_skip_line = false;    
-      sv_currentLine++;
-      sv_currentPixel = 0;
     }
   }
 
@@ -238,11 +240,11 @@ void capture_sv_frame() {
 
 //////////////////////////////////////////////////////////////////////////
 void ips_hsync() {
-  if (ips_currentLine == 144) {
+  if ((ips_current_frame + RENDER_FRAME_NUMBER) % 2 != 0) {
     return;
   }
 
-  if (ips_current_frame % 25 != 0) {
+  if (ips_currentLine == 144) {
     return;
   }
 
@@ -256,7 +258,8 @@ void ips_hsync() {
 
 //////////////////////////////////////////////////////////////////////////
 void ips_vsync() {
-  if (++ips_current_frame % 25 != 0) {
+  // Render only every n'th frame.
+  if ((ips_current_frame++ + RENDER_FRAME_NUMBER) % 2 != 0) {
     return;
   }
 
