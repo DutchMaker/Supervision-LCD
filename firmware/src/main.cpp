@@ -21,10 +21,15 @@
 #define PIN_TEST_SV_LINE_LATCH   14
 #define PIN_TEST_SV_FRAME_POLARITY  13
 
+#define VSYNC_TIMER_DELAY 16666
+#define VSYNC_END_TIMER_DELAY 107
+#define HSYNC_TIMER_DELAY 108
+
 #define RENDER_FRAME_NUMBER 5
 
 IntervalTimer ips_hsyncTimer;
 IntervalTimer ips_vsyncTimer;
+IntervalTimer ips_vsyncEndTimer;
 
 volatile uint8_t frameBuffer[160][144];
 volatile unsigned int ips_currentLine = 0;
@@ -43,10 +48,14 @@ bool ips_rendering_frame = false;
 int ips_current_frame = 0;
 
 void draw_test_screen();
-void render_ips_frame();
+void start_rendering_ips();
+void render_ips_frame(bool pulse_clock);
 void capture_sv_frame();
 void ips_hsync();
-void ips_vsync();
+void ips_hsync(bool reset_line);
+void ips_vsync1_start();
+void ips_vsync1_end();
+void ips_frame_rendered();
 void reset_state();
 
 //////////////////////////////////////////////////////////////////////////
@@ -85,7 +94,7 @@ void setup() {
 //////////////////////////////////////////////////////////////////////////
 void loop() {
   if (ips_rendering_frame) {
-    render_ips_frame();
+    render_ips_frame(true);
     return; // We cannot process SV screen data and render the IPS at the same time as the CPU is not fast enough.
   }
 
@@ -102,10 +111,19 @@ void draw_test_screen() {
   }
 
   
-  // Draw a circle
+  // Draw a circle border
   int centerX = 80;
   int centerY = 72;
   int radius = 50;
+  for (int i = 0; i < 160; i++) {
+      for (int j = 0; j < 144; j++) {
+          if (sqrt(pow(i - centerX, 2) + pow(j - centerY, 2)) <= 52) {
+              frameBuffer[i][j] = 1;
+          }
+      }
+  }
+
+  // Draw inner circle
   for (int i = 0; i < 160; i++) {
       for (int j = 0; j < 144; j++) {
           if (sqrt(pow(i - centerX, 2) + pow(j - centerY, 2)) <= radius) {
@@ -124,39 +142,42 @@ void draw_test_screen() {
       }
   }
 
+  // Draw test bars
   for (int i = 0; i < 160; i++) {
-    frameBuffer[i][0] = 0;
-    frameBuffer[i][1] = 0;
-    frameBuffer[i][3] = 0;
-
-    frameBuffer[i][4] = 1;
-    frameBuffer[i][5] = 1;
-    frameBuffer[i][6] = 1;
-
-    frameBuffer[i][7] = 2;
-    frameBuffer[i][8] = 2;
-    frameBuffer[i][9] = 2;
-
-    frameBuffer[i][10] = 3;
-    frameBuffer[i][11] = 3;
-    frameBuffer[i][12] = 3;
+    for (int j = 0; j < 4; j++) {
+      frameBuffer[i][0 + (j * 4)] = j;
+      frameBuffer[i][1 + (j * 4)] = j;
+      frameBuffer[i][2 + (j * 4)] = j;
+      frameBuffer[i][3 + (j * 4)] = j;
+    }
   }
 
 }
 
 //////////////////////////////////////////////////////////////////////////
-void render_ips_frame() {
+void start_rendering_ips() {
+  ips_rendering_frame = true;
+  ips_vsync1_start();
+}
+
+//////////////////////////////////////////////////////////////////////////
+void render_ips_frame(bool pulse_clock) {
   if (ips_currentPixel >= 160) {
     return;
   }
 
-  digitalWriteFast(PIN_IPS_CLOCK, HIGH);
-  delayNanoseconds(5);
-  digitalWriteFast(PIN_IPS_DATA1, frameBuffer[ips_currentPixel][ips_currentLine] & 1);
-  digitalWriteFast(PIN_IPS_DATA0, (frameBuffer[ips_currentPixel][ips_currentLine] >> 1) & 1);
-  delayNanoseconds(5);
-  digitalWriteFast(PIN_IPS_CLOCK, LOW);
-  delayNanoseconds(5);
+  if (pulse_clock) {
+    digitalWriteFast(PIN_IPS_CLOCK, HIGH);
+    delayNanoseconds(15);
+  }
+
+  digitalWriteFast(PIN_IPS_DATA0, frameBuffer[ips_currentPixel][ips_currentLine] & 1);
+  digitalWriteFast(PIN_IPS_DATA1, (frameBuffer[ips_currentPixel][ips_currentLine] >> 1) & 1);
+
+  if (pulse_clock) {
+    delayNanoseconds(15);
+    digitalWriteFast(PIN_IPS_CLOCK, LOW);
+  }
   
   ips_currentPixel++;
 }
@@ -215,11 +236,7 @@ void capture_sv_frame() {
   if (sv_frame_polarity == HIGH && sv_pin_state_frame_polarity != sv_frame_polarity) {
     // Frame polarity transitioned from low to high.
     // Start the timers to render the IPS screen.
-    ips_rendering_frame = true;
-
-    ips_hsyncTimer.begin(ips_hsync, 108);
-    ips_vsyncTimer.begin(ips_vsync, 16666);
-
+    start_rendering_ips();
     return;
   }
   else if (sv_frame_polarity == LOW && sv_pin_state_frame_polarity != sv_frame_polarity) {
@@ -240,37 +257,68 @@ void capture_sv_frame() {
 
 //////////////////////////////////////////////////////////////////////////
 void ips_hsync() {
-  if ((ips_current_frame + RENDER_FRAME_NUMBER) % 2 != 0) {
-    return;
-  }
+  ips_hsync(true);
+}
+
+//////////////////////////////////////////////////////////////////////////
+void ips_hsync(bool reset_line) {
+  // if ((ips_current_frame + RENDER_FRAME_NUMBER) % 2 != 0) {
+  //   return;
+  // }
 
   if (ips_currentLine == 144) {
     return;
   }
 
-  digitalWriteFast(PIN_IPS_HSYNC, HIGH);
-  delayNanoseconds(300);
-  digitalWriteFast(PIN_IPS_HSYNC, LOW);
+  if (reset_line) {
+    ips_currentLine++;
+    ips_currentPixel = 0;
+  }
 
-  ips_currentLine++;
-  ips_currentPixel = 0;
+  // Push the first pixel so it is ready during the hsync.
+  render_ips_frame(false);
+
+  digitalWriteFast(PIN_IPS_HSYNC, HIGH);
+  delayNanoseconds(1500);
+  digitalWriteFast(PIN_IPS_CLOCK, HIGH);
+  delayNanoseconds(80);
+  digitalWriteFast(PIN_IPS_CLOCK, LOW);
+  delayNanoseconds(1500);
+  digitalWriteFast(PIN_IPS_HSYNC, LOW);
 }
 
 //////////////////////////////////////////////////////////////////////////
-void ips_vsync() {
+void ips_vsync1_start() {
   // Render only every n'th frame.
-  if ((ips_current_frame++ + RENDER_FRAME_NUMBER) % 2 != 0) {
-    return;
-  }
+  // if ((ips_current_frame++ + RENDER_FRAME_NUMBER) % 2 != 0) {
+  //   return;
+  // }
+  //ips_current_frame = 0;
 
-  ips_current_frame = 0;
+  ips_vsyncTimer.begin(ips_frame_rendered, VSYNC_TIMER_DELAY);
 
+  // vsync start
+  digitalWriteFast(PIN_IPS_VSYNC, HIGH);
+  ips_vsyncEndTimer.begin(ips_vsync1_end, VSYNC_END_TIMER_DELAY);
+  
+  delayMicroseconds(18);
+  ips_hsyncTimer.begin(ips_hsync, HSYNC_TIMER_DELAY);
+  
+  ips_hsync(false);
+}
+
+//////////////////////////////////////////////////////////////////////////
+void ips_vsync1_end() {
+  // Vsync cycle of 108 uS is done.
+  ips_vsyncEndTimer.end();
+  digitalWriteFast(PIN_IPS_VSYNC, LOW);
+}
+
+//////////////////////////////////////////////////////////////////////////
+void ips_frame_rendered() {
+  // Frame is rendered, end the timers and reset state so we are ready for the next frame.
   ips_hsyncTimer.end();
   ips_vsyncTimer.end();
-
-  digitalWriteFast(PIN_IPS_VSYNC, HIGH);
-  delayNanoseconds(300);
-  digitalWriteFast(PIN_IPS_VSYNC, LOW);
 
   reset_state();
 }
