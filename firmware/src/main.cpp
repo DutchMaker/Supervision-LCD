@@ -25,13 +25,15 @@
 #define VSYNC_END_TIMER_DELAY 107
 #define HSYNC_TIMER_DELAY 108
 
-#define RENDER_FRAME_NUMBER 5
+#define FRAMEBUFFER_WIDTH 160
+#define FRAMEBUFFER_HEIGHT 144
+#define FRAMEBUFFER_INDEX(x, y) (x + y * FRAMEBUFFER_WIDTH)
 
 IntervalTimer ips_hsyncTimer;
 IntervalTimer ips_vsyncTimer;
 IntervalTimer ips_vsyncEndTimer;
 
-volatile uint8_t frameBuffer[160][144];
+volatile uint8_t frameBuffer[2][FRAMEBUFFER_WIDTH * FRAMEBUFFER_HEIGHT];
 volatile unsigned int ips_currentLine = 0;
 volatile unsigned int ips_currentPixel = 0;
 
@@ -45,7 +47,7 @@ bool sv_skip_line = false;
 int sv_currentPixel = 0;
 bool ips_rendering_frame = false;
 
-int ips_current_frame = 0;
+int frame_number = 0;
 
 void draw_test_screen();
 void start_rendering_ips();
@@ -105,8 +107,8 @@ void loop() {
 void draw_test_screen() {
   for (int i = 0; i < 160; i++) {
     for (int j = 0; j < 144; j++) {
-      frameBuffer[i][j] = LOW;
-      frameBuffer[i][j] = LOW;
+      frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = LOW;
+      frameBuffer[1][FRAMEBUFFER_INDEX(i, j)] = LOW;
     }
   }
 
@@ -118,7 +120,7 @@ void draw_test_screen() {
   for (int i = 0; i < 160; i++) {
       for (int j = 0; j < 144; j++) {
           if (sqrt(pow(i - centerX, 2) + pow(j - centerY, 2)) <= 52) {
-              frameBuffer[i][j] = 1;
+              frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 1;
           }
       }
   }
@@ -127,16 +129,19 @@ void draw_test_screen() {
   for (int i = 0; i < 160; i++) {
       for (int j = 0; j < 144; j++) {
           if (sqrt(pow(i - centerX, 2) + pow(j - centerY, 2)) <= radius) {
-              frameBuffer[i][j] = 0;
+              frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 0;
 
-              if (j % 2 == 0) {
-                frameBuffer[i][j] = 1;
+              if ((j + 1) % 2 == 0) {
+                frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 1;
+                frameBuffer[1][FRAMEBUFFER_INDEX(i, j)] = 0;
               }
-              else if (j % 3 == 0) {
-                frameBuffer[i][j] = 2;
+              else if ((j + 1) % 3 == 0) {
+                frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 0;
+                frameBuffer[1][FRAMEBUFFER_INDEX(i, j)] = 1;
               }
-              else if (j % 4 == 0) {
-                frameBuffer[i][j] = 3;
+              else if ((j + 1) % 4 == 0) {
+                frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 1;
+                frameBuffer[1][FRAMEBUFFER_INDEX(i, j)] = 1;
               }
           }
       }
@@ -145,10 +150,33 @@ void draw_test_screen() {
   // Draw test bars
   for (int i = 0; i < 160; i++) {
     for (int j = 0; j < 4; j++) {
-      frameBuffer[i][0 + (j * 4)] = j;
-      frameBuffer[i][1 + (j * 4)] = j;
-      frameBuffer[i][2 + (j * 4)] = j;
-      frameBuffer[i][3 + (j * 4)] = j;
+      uint8_t y = 4;
+      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
+      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 0;
+      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
+      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 0;
+      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
+      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 0;
+      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
+      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 0;
+
+      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 0;
+      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
+      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 0;
+      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
+      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 0;
+      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
+      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 0;
+      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
+
+      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
+      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
+      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
+      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
+      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
+      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
+      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
+      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
     }
   }
 
@@ -171,8 +199,8 @@ void render_ips_frame(bool pulse_clock) {
     delayNanoseconds(15);
   }
 
-  digitalWriteFast(PIN_IPS_DATA0, frameBuffer[ips_currentPixel][ips_currentLine] & 1);
-  digitalWriteFast(PIN_IPS_DATA1, (frameBuffer[ips_currentPixel][ips_currentLine] >> 1) & 1);
+  digitalWriteFast(PIN_IPS_DATA0, frameBuffer[0][FRAMEBUFFER_INDEX(ips_currentPixel, ips_currentLine)]);
+  digitalWriteFast(PIN_IPS_DATA1, frameBuffer[1][FRAMEBUFFER_INDEX(ips_currentPixel, ips_currentLine)]);
 
   if (pulse_clock) {
     delayNanoseconds(15);
@@ -199,6 +227,9 @@ void capture_sv_frame() {
       sv_wait_for_new_field = false;
     }
     else {
+      sv_pin_state_clock = sv_pixel_clock;
+      sv_pin_state_line_latch = sv_line_latch;
+      sv_pin_state_frame_polarity = sv_frame_polarity;
       return;
     }
   }
@@ -217,18 +248,14 @@ void capture_sv_frame() {
   }
   else if (sv_pixel_clock == HIGH && sv_pin_state_clock != sv_pixel_clock) {
     // Pixel clock transitioned from low to high.
-    if (sv_currentPixel < 157 && !sv_skip_line && sv_currentLine < 144) {
-      if (sv_currentField == 0) {
-        frameBuffer[sv_currentPixel++][sv_currentLine] = digitalReadFast(PIN_SV_DATA0);
-        frameBuffer[sv_currentPixel++][sv_currentLine] = digitalReadFast(PIN_SV_DATA1);
-        frameBuffer[sv_currentPixel++][sv_currentLine] = digitalReadFast(PIN_SV_DATA2);
-        frameBuffer[sv_currentPixel++][sv_currentLine] = digitalReadFast(PIN_SV_DATA3);
-      }
-      else {
-        frameBuffer[sv_currentPixel++][sv_currentLine] |= digitalReadFast(PIN_SV_DATA0) << 1;
-        frameBuffer[sv_currentPixel++][sv_currentLine] |= digitalReadFast(PIN_SV_DATA1) << 1;
-        frameBuffer[sv_currentPixel++][sv_currentLine] |= digitalReadFast(PIN_SV_DATA2) << 1;
-        frameBuffer[sv_currentPixel++][sv_currentLine] |= digitalReadFast(PIN_SV_DATA3) << 1;
+    if (frame_number % 3 == 0) {
+      if (sv_currentPixel < 157 && !sv_skip_line && sv_currentLine < 144) {
+        // noInterrupts();
+        frameBuffer[sv_currentField][FRAMEBUFFER_INDEX(sv_currentPixel++, sv_currentLine)] = digitalReadFast(PIN_SV_DATA0);
+        frameBuffer[sv_currentField][FRAMEBUFFER_INDEX(sv_currentPixel++, sv_currentLine)] = digitalReadFast(PIN_SV_DATA1);
+        frameBuffer[sv_currentField][FRAMEBUFFER_INDEX(sv_currentPixel++, sv_currentLine)] = digitalReadFast(PIN_SV_DATA2);
+        frameBuffer[sv_currentField][FRAMEBUFFER_INDEX(sv_currentPixel++, sv_currentLine)] = digitalReadFast(PIN_SV_DATA3);
+        // interrupts();
       }
     }
   }
@@ -236,6 +263,7 @@ void capture_sv_frame() {
   if (sv_frame_polarity == HIGH && sv_pin_state_frame_polarity != sv_frame_polarity) {
     // Frame polarity transitioned from low to high.
     // Start the timers to render the IPS screen.
+    sv_pin_state_frame_polarity = sv_frame_polarity;
     start_rendering_ips();
     return;
   }
@@ -262,10 +290,6 @@ void ips_hsync() {
 
 //////////////////////////////////////////////////////////////////////////
 void ips_hsync(bool reset_line) {
-  // if ((ips_current_frame + RENDER_FRAME_NUMBER) % 2 != 0) {
-  //   return;
-  // }
-
   if (ips_currentLine == 144) {
     return;
   }
@@ -289,12 +313,6 @@ void ips_hsync(bool reset_line) {
 
 //////////////////////////////////////////////////////////////////////////
 void ips_vsync1_start() {
-  // Render only every n'th frame.
-  // if ((ips_current_frame++ + RENDER_FRAME_NUMBER) % 2 != 0) {
-  //   return;
-  // }
-  //ips_current_frame = 0;
-
   ips_vsyncTimer.begin(ips_frame_rendered, VSYNC_TIMER_DELAY);
 
   // vsync start
@@ -319,6 +337,11 @@ void ips_frame_rendered() {
   // Frame is rendered, end the timers and reset state so we are ready for the next frame.
   ips_hsyncTimer.end();
   ips_vsyncTimer.end();
+
+  frame_number++;
+  if (frame_number >= 65000) {
+    frame_number = 0;
+  }
 
   reset_state();
 }
