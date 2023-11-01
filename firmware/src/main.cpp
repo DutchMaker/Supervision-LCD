@@ -227,10 +227,7 @@ void capture_sv_frame() {
       sv_wait_for_new_field = false;
     }
     else {
-      sv_pin_state_clock = sv_pixel_clock;
-      sv_pin_state_line_latch = sv_line_latch;
-      sv_pin_state_frame_polarity = sv_frame_polarity;
-      return;
+      goto update_pinstate_and_return;
     }
   }
 
@@ -248,7 +245,7 @@ void capture_sv_frame() {
   }
   else if (sv_pixel_clock == HIGH && sv_pin_state_clock != sv_pixel_clock) {
     // Pixel clock transitioned from low to high.
-    if (frame_number % 3 == 0) {
+    if (frame_number == 2) {
       if (sv_currentPixel < 157 && !sv_skip_line && sv_currentLine < 144) {
         // noInterrupts();
         frameBuffer[sv_currentField][FRAMEBUFFER_INDEX(sv_currentPixel++, sv_currentLine)] = digitalReadFast(PIN_SV_DATA0);
@@ -263,9 +260,9 @@ void capture_sv_frame() {
   if (sv_frame_polarity == HIGH && sv_pin_state_frame_polarity != sv_frame_polarity) {
     // Frame polarity transitioned from low to high.
     // Start the timers to render the IPS screen.
-    sv_pin_state_frame_polarity = sv_frame_polarity;
+    //sv_pin_state_frame_polarity = sv_frame_polarity;
     start_rendering_ips();
-    return;
+    goto update_pinstate_and_return;
   }
   else if (sv_frame_polarity == LOW && sv_pin_state_frame_polarity != sv_frame_polarity) {
     // Frame polarity transitioned from high to low.
@@ -274,6 +271,7 @@ void capture_sv_frame() {
     sv_currentPixel = 0;
   }
 
+update_pinstate_and_return:
   sv_pin_state_clock = sv_pixel_clock;
   sv_pin_state_line_latch = sv_line_latch;
   sv_pin_state_frame_polarity = sv_frame_polarity;
@@ -338,8 +336,7 @@ void ips_frame_rendered() {
   ips_hsyncTimer.end();
   ips_vsyncTimer.end();
 
-  frame_number++;
-  if (frame_number >= 65000) {
+  if (frame_number++ == 2) {
     frame_number = 0;
   }
 
