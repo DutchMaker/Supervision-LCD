@@ -1,4 +1,5 @@
 #include "Arduino.h"
+#include "intro_image.h"
 
 // IPS pins
 #define PIN_IPS_HSYNC 4
@@ -139,78 +140,77 @@ void loop() {
 void draw_intro_screen() {
   for (int i = 0; i < 160; i++) {
     for (int j = 0; j < 144; j++) {
-      frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = LOW;
-      frameBuffer[1][FRAMEBUFFER_INDEX(i, j)] = LOW;
+      frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = intro_image[FRAMEBUFFER_INDEX(i, j)];
+      frameBuffer[1][FRAMEBUFFER_INDEX(i, j)] = intro_image[FRAMEBUFFER_INDEX(i, j)];
     }
   }
-
   
-  // Draw a circle border
-  int centerX = 80;
-  int centerY = 72;
-  int radius = 50;
-  for (int i = 0; i < 160; i++) {
-      for (int j = 0; j < 144; j++) {
-          if (sqrt(pow(i - centerX, 2) + pow(j - centerY, 2)) <= 52) {
-              frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 1;
-          }
-      }
-  }
+  // // Draw a circle border
+  // int centerX = 80;
+  // int centerY = 72;
+  // int radius = 50;
+  // for (int i = 0; i < 160; i++) {
+  //     for (int j = 0; j < 144; j++) {
+  //         if (sqrt(pow(i - centerX, 2) + pow(j - centerY, 2)) <= 52) {
+  //             frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 1;
+  //         }
+  //     }
+  // }
 
-  // Draw inner circle
-  for (int i = 0; i < 160; i++) {
-      for (int j = 0; j < 144; j++) {
-          if (sqrt(pow(i - centerX, 2) + pow(j - centerY, 2)) <= radius) {
-              frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 0;
+  // // Draw inner circle
+  // for (int i = 0; i < 160; i++) {
+  //     for (int j = 0; j < 144; j++) {
+  //         if (sqrt(pow(i - centerX, 2) + pow(j - centerY, 2)) <= radius) {
+  //             frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 0;
 
-              if ((j + 1) % 2 == 0) {
-                frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 1;
-                frameBuffer[1][FRAMEBUFFER_INDEX(i, j)] = 0;
-              }
-              else if ((j + 1) % 3 == 0) {
-                frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 0;
-                frameBuffer[1][FRAMEBUFFER_INDEX(i, j)] = 1;
-              }
-              else if ((j + 1) % 4 == 0) {
-                frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 1;
-                frameBuffer[1][FRAMEBUFFER_INDEX(i, j)] = 1;
-              }
-          }
-      }
-  }
+  //             if ((j + 1) % 2 == 0) {
+  //               frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 1;
+  //               frameBuffer[1][FRAMEBUFFER_INDEX(i, j)] = 0;
+  //             }
+  //             else if ((j + 1) % 3 == 0) {
+  //               frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 0;
+  //               frameBuffer[1][FRAMEBUFFER_INDEX(i, j)] = 1;
+  //             }
+  //             else if ((j + 1) % 4 == 0) {
+  //               frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 1;
+  //               frameBuffer[1][FRAMEBUFFER_INDEX(i, j)] = 1;
+  //             }
+  //         }
+  //     }
+  // }
 
-  // Draw test bars
-  for (int i = 0; i < 160; i++) {
-    for (int j = 0; j < 4; j++) {
-      uint8_t y = 4;
-      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
-      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 0;
-      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
-      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 0;
-      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
-      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 0;
-      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
-      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 0;
+  // // Draw test bars
+  // for (int i = 0; i < 160; i++) {
+  //   for (int j = 0; j < 4; j++) {
+  //     uint8_t y = 4;
+  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
+  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 0;
+  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
+  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 0;
+  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
+  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 0;
+  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
+  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 0;
 
-      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 0;
-      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
-      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 0;
-      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
-      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 0;
-      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
-      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 0;
-      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
+  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 0;
+  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
+  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 0;
+  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
+  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 0;
+  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
+  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 0;
+  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
 
-      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
-      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
-      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
-      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
-      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
-      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
-      frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
-      frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
-    }
-  }
+  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
+  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
+  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
+  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
+  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
+  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
+  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
+  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
+  //   }
+  // }
 
 }
 
