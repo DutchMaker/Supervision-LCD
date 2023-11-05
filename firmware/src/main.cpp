@@ -15,13 +15,14 @@
 #define PIN_SV_DATA3           19
 #define PIN_SV_PIXEL_CLOCK     18
 #define PIN_SV_LINE_LATCH      17
-#define PIN_SV_FRAME_POLARITY  16
-#define PIN_SV_FRAME_LATCH     11
+#define PIN_SV_FRAME_LATCH     16
+#define PIN_SV_FRAME_POLARITY  15
+#define PIN_SV_POWER           12
 
 // Test pins
-#define PIN_TEST_SV_PIXEL_CLOCK  15
-#define PIN_TEST_SV_LINE_LATCH   14
-#define PIN_TEST_SV_FRAME_POLARITY  13
+#define PIN_TEST_SV_PIXEL_CLOCK  9
+#define PIN_TEST_SV_LINE_LATCH   10
+#define PIN_TEST_SV_FRAME_POLARITY  11
 
 #define SV_BOOT_TIME 39000
 #define VSYNC_TIMER_DELAY 16666
@@ -71,7 +72,8 @@ void reset_state();
 
 //////////////////////////////////////////////////////////////////////////
 void setup() {
-  Serial.begin(115200);
+  pinMode(PIN_SV_POWER, OUTPUT);
+  digitalWriteFast(PIN_SV_POWER, HIGH);
 
   pinMode(PIN_IPS_VSYNC, OUTPUT);
   pinMode(PIN_IPS_CLOCK, OUTPUT);
@@ -120,6 +122,7 @@ void loop() {
   if (wait_for_intro) {
     if (millis() - wait_for_intro_time > 2000) {
       wait_for_intro = false;
+      digitalWriteFast(PIN_SV_POWER, LOW); // Enable SV power
     }
     else if (!ips_rendering_frame) {
       start_rendering_ips();
@@ -225,19 +228,20 @@ void wait_for_sv_boot() {
   sv_pin_state_frame_latch = sv_frame_latch;
 
   if (boot_frame_latch_count >= 5) {
-    sv_wait_for_boot = false;
-
     if (digitalReadFast(PIN_SV_FRAME_POLARITY) == HIGH) {
-      Serial.println("Invalid boot, restart console");
-      // TODO: Reboot console
-    }
-    else {
-      Serial.println("Successfull boot");
+      // Invalid boot state, restart console
+      // Reboot console
+      delay(1000);
+      digitalWriteFast(PIN_SV_POWER, HIGH);
+      boot_frame_latch_count = 0;
+      sv_pin_state_frame_latch = 0;
+      delay(1000);
+      digitalWriteFast(PIN_SV_POWER, LOW);
+
+      return;
     }
 
-    digitalWriteFast(PIN_TEST_SV_PIXEL_CLOCK, HIGH);
-    delayNanoseconds(1000);
-    digitalWriteFast(PIN_TEST_SV_PIXEL_CLOCK, LOW);
+    sv_wait_for_boot = false;
   }
 }
 
