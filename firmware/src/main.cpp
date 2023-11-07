@@ -44,6 +44,7 @@ volatile unsigned int ips_currentPixel = 0;
 bool wait_for_intro = false;
 uint32_t wait_for_intro_time = 0;
 bool sv_wait_for_boot = true;
+uint8_t boot_line_latch_count = 0;
 uint8_t boot_frame_latch_count = 0;
 bool sv_wait_for_new_field = true;
 int sv_pin_state_clock = 0;
@@ -147,99 +148,49 @@ void draw_intro_screen() {
       frameBuffer[1][FRAMEBUFFER_INDEX(i, j)] = intro_image[FRAMEBUFFER_INDEX(i, j)];
     }
   }
-  
-  // // Draw a circle border
-  // int centerX = 80;
-  // int centerY = 72;
-  // int radius = 50;
-  // for (int i = 0; i < 160; i++) {
-  //     for (int j = 0; j < 144; j++) {
-  //         if (sqrt(pow(i - centerX, 2) + pow(j - centerY, 2)) <= 52) {
-  //             frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 1;
-  //         }
-  //     }
-  // }
-
-  // // Draw inner circle
-  // for (int i = 0; i < 160; i++) {
-  //     for (int j = 0; j < 144; j++) {
-  //         if (sqrt(pow(i - centerX, 2) + pow(j - centerY, 2)) <= radius) {
-  //             frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 0;
-
-  //             if ((j + 1) % 2 == 0) {
-  //               frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 1;
-  //               frameBuffer[1][FRAMEBUFFER_INDEX(i, j)] = 0;
-  //             }
-  //             else if ((j + 1) % 3 == 0) {
-  //               frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 0;
-  //               frameBuffer[1][FRAMEBUFFER_INDEX(i, j)] = 1;
-  //             }
-  //             else if ((j + 1) % 4 == 0) {
-  //               frameBuffer[0][FRAMEBUFFER_INDEX(i, j)] = 1;
-  //               frameBuffer[1][FRAMEBUFFER_INDEX(i, j)] = 1;
-  //             }
-  //         }
-  //     }
-  // }
-
-  // // Draw test bars
-  // for (int i = 0; i < 160; i++) {
-  //   for (int j = 0; j < 4; j++) {
-  //     uint8_t y = 4;
-  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
-  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 0;
-  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
-  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 0;
-  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
-  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 0;
-  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
-  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 0;
-
-  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 0;
-  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
-  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 0;
-  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
-  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 0;
-  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
-  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 0;
-  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
-
-  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
-  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
-  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
-  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
-  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
-  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
-  //     frameBuffer[0][FRAMEBUFFER_INDEX(i, y)] = 1;
-  //     frameBuffer[1][FRAMEBUFFER_INDEX(i, y++)] = 1;
-  //   }
-  // }
-
 }
 
 //////////////////////////////////////////////////////////////////////////
 void wait_for_sv_boot() {
+  uint8_t sv_line_latch = digitalReadFast(PIN_SV_LINE_LATCH);
   uint8_t sv_frame_latch = digitalReadFast(PIN_SV_FRAME_LATCH);
+
+  if (boot_line_latch_count < 50 && sv_line_latch != sv_pin_state_line_latch  && sv_line_latch == HIGH) {
+    boot_line_latch_count++;
+  }
 
   if (sv_frame_latch != sv_pin_state_frame_latch  && sv_frame_latch == HIGH) {
     boot_frame_latch_count++;
   }
 
+  sv_pin_state_line_latch = sv_line_latch;
   sv_pin_state_frame_latch = sv_frame_latch;
 
-  if (boot_frame_latch_count >= 5) {
-    if (digitalReadFast(PIN_SV_FRAME_POLARITY) == HIGH) {
-      // Invalid boot state, restart console
+  if (boot_line_latch_count == 50) {
+    boot_line_latch_count++;
+    boot_frame_latch_count = 0;
+    return;
+  }
+  
+  if (boot_frame_latch_count >= 4) {
+    if (digitalReadFast(PIN_SV_FRAME_POLARITY) == LOW) {
+      // Invalid boot state (we want polarity to start with high signal for correct frame sync).
       // Reboot console
       delay(1000);
       digitalWriteFast(PIN_SV_POWER, HIGH);
+      boot_line_latch_count = 0;
       boot_frame_latch_count = 0;
+      sv_pin_state_line_latch = 0;
       sv_pin_state_frame_latch = 0;
       delay(1000);
       digitalWriteFast(PIN_SV_POWER, LOW);
 
       return;
     }
+
+    digitalWriteFast(PIN_TEST_SV_PIXEL_CLOCK, HIGH);
+    delayMicroseconds(1);
+    digitalWriteFast(PIN_TEST_SV_PIXEL_CLOCK, LOW);
 
     sv_wait_for_boot = false;
   }
@@ -262,8 +213,8 @@ void render_ips_frame(bool pulse_clock) {
     delayNanoseconds(15);
   }
 
-  digitalWriteFast(PIN_IPS_DATA0, frameBuffer[1][FRAMEBUFFER_INDEX(ips_currentPixel, ips_currentLine)]);
-  digitalWriteFast(PIN_IPS_DATA1, frameBuffer[0][FRAMEBUFFER_INDEX(ips_currentPixel, ips_currentLine)]);
+  digitalWriteFast(PIN_IPS_DATA0, frameBuffer[0][FRAMEBUFFER_INDEX(ips_currentPixel, ips_currentLine)]);
+  digitalWriteFast(PIN_IPS_DATA1, frameBuffer[1][FRAMEBUFFER_INDEX(ips_currentPixel, ips_currentLine)]);
 
   if (pulse_clock) {
     delayNanoseconds(15);
@@ -358,9 +309,9 @@ update_pinstate_and_return:
   sv_pin_state_line_latch = sv_line_latch;
   sv_pin_state_frame_polarity = sv_frame_polarity;
 
-  digitalWriteFast(PIN_TEST_SV_PIXEL_CLOCK, sv_pixel_clock);
-  digitalWriteFast(PIN_TEST_SV_LINE_LATCH, sv_line_latch);
-  digitalWriteFast(PIN_TEST_SV_FRAME_POLARITY, sv_frame_polarity);
+  // digitalWriteFast(PIN_TEST_SV_PIXEL_CLOCK, sv_pixel_clock);
+  // digitalWriteFast(PIN_TEST_SV_LINE_LATCH, sv_line_latch);
+  // digitalWriteFast(PIN_TEST_SV_FRAME_POLARITY, sv_frame_polarity);
 }
 
 //////////////////////////////////////////////////////////////////////////
