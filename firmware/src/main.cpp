@@ -74,7 +74,7 @@ void reset_state();
 //////////////////////////////////////////////////////////////////////////
 void setup() {
   pinMode(PIN_SV_POWER, OUTPUT);
-  digitalWriteFast(PIN_SV_POWER, HIGH);
+  digitalWriteFast(PIN_SV_POWER, LOW); //HIGH);
 
   pinMode(PIN_IPS_VSYNC, OUTPUT);
   pinMode(PIN_IPS_CLOCK, OUTPUT);
@@ -123,7 +123,7 @@ void loop() {
   if (wait_for_intro) {
     if (millis() - wait_for_intro_time > 2000) {
       wait_for_intro = false;
-      digitalWriteFast(PIN_SV_POWER, LOW); // Enable SV power
+      digitalWriteFast(PIN_SV_POWER, HIGH); //LOW); // Enable SV power
     }
     else if (!ips_rendering_frame) {
       start_rendering_ips();
@@ -177,13 +177,13 @@ void wait_for_sv_boot() {
       // Invalid boot state (we want polarity to start with high signal for correct frame sync).
       // Reboot console
       delay(1000);
-      digitalWriteFast(PIN_SV_POWER, HIGH);
+      digitalWriteFast(PIN_SV_POWER, LOW); //HIGH);
       boot_line_latch_count = 0;
       boot_frame_latch_count = 0;
       sv_pin_state_line_latch = 0;
       sv_pin_state_frame_latch = 0;
       delay(1000);
-      digitalWriteFast(PIN_SV_POWER, LOW);
+      digitalWriteFast(PIN_SV_POWER, HIGH); //LOW);
 
       return;
     }
