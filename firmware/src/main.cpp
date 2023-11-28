@@ -74,7 +74,7 @@ void reset_state();
 //////////////////////////////////////////////////////////////////////////
 void setup() {
   pinMode(PIN_SV_POWER, OUTPUT);
-  digitalWriteFast(PIN_SV_POWER, LOW); //HIGH);
+  digitalWriteFast(PIN_SV_POWER, LOW);
 
   pinMode(PIN_IPS_VSYNC, OUTPUT);
   pinMode(PIN_IPS_CLOCK, OUTPUT);
@@ -123,7 +123,7 @@ void loop() {
   if (wait_for_intro) {
     if (millis() - wait_for_intro_time > 2000) {
       wait_for_intro = false;
-      digitalWriteFast(PIN_SV_POWER, HIGH); //LOW); // Enable SV power
+      digitalWriteFast(PIN_SV_POWER, HIGH);
     }
     else if (!ips_rendering_frame) {
       start_rendering_ips();
@@ -174,16 +174,17 @@ void wait_for_sv_boot() {
   
   if (boot_frame_latch_count >= 4) {
     if (digitalReadFast(PIN_SV_FRAME_POLARITY) == LOW) {
-      // Invalid boot state (we want polarity to start with high signal for correct frame sync).
-      // Reboot console
+      // Invalid boot state:
+      // we want frame polarity to start with HIGH signal for so we know we are starting with the correct type of frame.
+      // Reboot the console and try again.
       delay(1000);
-      digitalWriteFast(PIN_SV_POWER, LOW); //HIGH);
+      digitalWriteFast(PIN_SV_POWER, LOW);
       boot_line_latch_count = 0;
       boot_frame_latch_count = 0;
       sv_pin_state_line_latch = 0;
       sv_pin_state_frame_latch = 0;
       delay(1000);
-      digitalWriteFast(PIN_SV_POWER, HIGH); //LOW);
+      digitalWriteFast(PIN_SV_POWER, HIGH);
 
       return;
     }
@@ -231,30 +232,31 @@ void capture_sv_frame() {
   uint8_t sv_frame_polarity = digitalReadFast(PIN_SV_FRAME_POLARITY);
 
   // Wait for frame polarity to go transition from low to high for the first time.
+  // We do this so we can start capturing the frame fields at the correct time so we don't start with an inverted frame field.
   if (sv_wait_for_new_field) {
     if (sv_pin_state_frame_polarity == -1 && sv_frame_polarity == LOW) {
+      // Frame polarity transitioned for the first time since we started capturing.
       sv_pin_state_frame_polarity = 0;
       sv_pin_state_clock = sv_pixel_clock;
       sv_pin_state_line_latch = sv_line_latch;
       return;
     }
     else if (sv_pin_state_frame_polarity == 0 && sv_frame_polarity == HIGH) {
+      // Frame polarity transitioned from low to high.
       sv_pin_state_frame_polarity = 1;
       sv_wait_for_new_field = false;
     }
     else {
-      //goto update_pinstate_and_return;
-      sv_pin_state_clock = sv_pixel_clock;
-      sv_pin_state_line_latch = sv_line_latch;
-      sv_pin_state_frame_polarity = sv_frame_polarity;
-      return;
+      // Continue to wait.
+      goto update_pinstate_and_return;
     }
   }
 
   if (sv_line_latch == HIGH && sv_pin_state_line_latch != sv_line_latch) {
     // Line latch transitioned from low to high.
     if (sv_currentLine % 10 == 0 && !sv_skip_line) {  
-      // Skip every 10th line. SuperVision has 160 lines, the IPS has 144.
+      // Supervision has 160 lines but the IPS we use only has 144.
+      // Skip every 10th line.
       sv_skip_line = true;
     }
     else {
@@ -265,23 +267,11 @@ void capture_sv_frame() {
   }
   else if (sv_pixel_clock == HIGH && sv_pin_state_clock != sv_pixel_clock) {
     // Pixel clock transitioned from low to high.
-    if (sv_currentPixel < 157 && !sv_skip_line && sv_currentLine < 144) {
-      // int i = -1;
-
-      // if (sv_currentField == 0) {
-      //   i = 0;
-      // }
-      // else if (sv_currentField == 2) {
-      //   i = 1;
-      // }
-
-      //int i = sv_currentField;
-      if (sv_currentField < 2) {
-        frameBuffer[sv_currentField][FRAMEBUFFER_INDEX(sv_currentPixel++, sv_currentLine)] = digitalReadFast(PIN_SV_DATA0);
-        frameBuffer[sv_currentField][FRAMEBUFFER_INDEX(sv_currentPixel++, sv_currentLine)] = digitalReadFast(PIN_SV_DATA1);
-        frameBuffer[sv_currentField][FRAMEBUFFER_INDEX(sv_currentPixel++, sv_currentLine)] = digitalReadFast(PIN_SV_DATA2);
-        frameBuffer[sv_currentField][FRAMEBUFFER_INDEX(sv_currentPixel++, sv_currentLine)] = digitalReadFast(PIN_SV_DATA3);
-      }
+    if (sv_currentPixel < 157 && !sv_skip_line && sv_currentLine < 144 && sv_currentField < 2) {
+      frameBuffer[sv_currentField][FRAMEBUFFER_INDEX(sv_currentPixel++, sv_currentLine)] = digitalReadFast(PIN_SV_DATA0);
+      frameBuffer[sv_currentField][FRAMEBUFFER_INDEX(sv_currentPixel++, sv_currentLine)] = digitalReadFast(PIN_SV_DATA1);
+      frameBuffer[sv_currentField][FRAMEBUFFER_INDEX(sv_currentPixel++, sv_currentLine)] = digitalReadFast(PIN_SV_DATA2);
+      frameBuffer[sv_currentField][FRAMEBUFFER_INDEX(sv_currentPixel++, sv_currentLine)] = digitalReadFast(PIN_SV_DATA3);
     }
   }
 
@@ -308,10 +298,6 @@ update_pinstate_and_return:
   sv_pin_state_clock = sv_pixel_clock;
   sv_pin_state_line_latch = sv_line_latch;
   sv_pin_state_frame_polarity = sv_frame_polarity;
-
-  // digitalWriteFast(PIN_TEST_SV_PIXEL_CLOCK, sv_pixel_clock);
-  // digitalWriteFast(PIN_TEST_SV_LINE_LATCH, sv_line_latch);
-  // digitalWriteFast(PIN_TEST_SV_FRAME_POLARITY, sv_frame_polarity);
 }
 
 //////////////////////////////////////////////////////////////////////////
