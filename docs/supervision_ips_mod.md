@@ -19,7 +19,7 @@ This article describes how I did it and how you could replicate it.
 
 ## This mod has flaws
 
-Before I go into more detail about how this mod is achieved, let me start by telling you that it is far from perfect and has a few flaws. 
+Before I go into the details about how this mod is achieved, let me start by telling you that it is far from perfect and has a few flaws. 
 
 ### 1. Lower resolution
 The IPS display has a 160x144 resolution whereas the Supervision uses 160x160. The mod will simply ignore every 10th row of pixels thereby omitting 16 rows of pixels in total, leaving 144 rows.  
@@ -54,11 +54,12 @@ I decided to accept this as a flaw and continue with this approach.
 
 ### The microcontroller
 
-Next challenge was the microcontroller that sits inbetween the Supervision motherboard and the IPS screen.  
+The next challenge was the microcontroller that sits inbetween the Supervision motherboard and the IPS screen.  
 I started with a simple 8-bit Arduino (Atmel 328) but quickly found out that it is not fast enough to capture the data coming from the Supervision motherboard, let alone do both capturing and rendering the new data.
 
 I dabbled around with an ESP32 board before settling on a Teensy 4.0.  
-The Teensy has a 600 MHz CPU, plenty of I/O and can be programmed using the Arduino library.
+The Teensy has a 600 MHz CPU and although that does not mean you can do I/O at that speed, it is still fast enough for what we are doing.
+It is also very easy to program for as it supports the Arduino library.
 
 
 ## Supervision LCD connector pinout

@@ -17,12 +17,7 @@
 #define PIN_SV_LINE_LATCH      17
 #define PIN_SV_FRAME_LATCH     16
 #define PIN_SV_FRAME_POLARITY  15
-#define PIN_SV_POWER           12
-
-// Test pins
-#define PIN_TEST_SV_PIXEL_CLOCK  9
-#define PIN_TEST_SV_LINE_LATCH   10
-#define PIN_TEST_SV_FRAME_POLARITY  11
+#define PIN_SV_POWER           12 // This pin controls the relay to turn on/off the Supervision console.
 
 #define SV_BOOT_TIME 39000
 #define VSYNC_TIMER_DELAY 16666
@@ -58,7 +53,6 @@ int sv_currentPixel = 0;
 bool ips_rendering_frame = false;
 bool rendering_intro = false;
 
-
 void draw_intro_screen();
 void wait_for_sv_boot();
 void start_rendering_ips();
@@ -91,29 +85,25 @@ void setup() {
   pinMode(PIN_SV_FRAME_POLARITY, INPUT_PULLDOWN);
   pinMode(PIN_SV_FRAME_LATCH, INPUT_PULLDOWN);
 
-  pinMode(PIN_TEST_SV_PIXEL_CLOCK, OUTPUT);
-  pinMode(PIN_TEST_SV_LINE_LATCH, OUTPUT);
-  pinMode(PIN_TEST_SV_FRAME_POLARITY, OUTPUT);
-
   digitalWriteFast(PIN_IPS_HSYNC, LOW);
   digitalWriteFast(PIN_IPS_VSYNC, LOW);
   digitalWriteFast(PIN_IPS_CLOCK, LOW);
   digitalWriteFast(PIN_IPS_DATA0, LOW);
   digitalWriteFast(PIN_IPS_DATA1, LOW);
 
-  digitalWriteFast(PIN_TEST_SV_PIXEL_CLOCK, LOW);
-  digitalWriteFast(PIN_TEST_SV_LINE_LATCH, LOW);
-  digitalWriteFast(PIN_TEST_SV_FRAME_POLARITY, LOW);
-
+  // Draw the intro screen into the framebuffer array.
   draw_intro_screen();
 
   wait_for_intro = true;
   rendering_intro = true;
 
+  // Render the framebuffer to the IPS screen.
   start_rendering_ips();
 }
 
 //////////////////////////////////////////////////////////////////////////
+// The main loop will either capture the Supervision LCD data and store it 
+// into the framebufer or render the framebuffer to the IPS screen.
 void loop() {
   if (ips_rendering_frame) {
     render_ips_frame(true);
@@ -151,6 +141,8 @@ void draw_intro_screen() {
 }
 
 //////////////////////////////////////////////////////////////////////////
+// Wait for the Supervision to boot up in the correct state.
+// If the boot state is not correct, reboot the console and try again.
 void wait_for_sv_boot() {
   uint8_t sv_line_latch = digitalReadFast(PIN_SV_LINE_LATCH);
   uint8_t sv_frame_latch = digitalReadFast(PIN_SV_FRAME_LATCH);
@@ -188,10 +180,6 @@ void wait_for_sv_boot() {
 
       return;
     }
-
-    digitalWriteFast(PIN_TEST_SV_PIXEL_CLOCK, HIGH);
-    delayMicroseconds(1);
-    digitalWriteFast(PIN_TEST_SV_PIXEL_CLOCK, LOW);
 
     sv_wait_for_boot = false;
   }
