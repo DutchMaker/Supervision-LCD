@@ -28,14 +28,17 @@
 #define FRAMEBUFFER_HEIGHT 144
 #define FRAMEBUFFER_INDEX(x, y) (x + y * FRAMEBUFFER_WIDTH)
 
+// Timers for the IPS screen hsync and vsync signals.
 IntervalTimer ips_hsyncTimer;
 IntervalTimer ips_vsyncTimer;
 IntervalTimer ips_vsyncEndTimer;
 
+// Framebuffer.
 volatile uint8_t frameBuffer[4][FRAMEBUFFER_WIDTH * FRAMEBUFFER_HEIGHT];
 volatile unsigned int ips_currentLine = 0;
 volatile unsigned int ips_currentPixel = 0;
 
+// Various state variables.
 bool wait_for_intro = false;
 uint32_t wait_for_intro_time = 0;
 bool sv_wait_for_boot = true;
@@ -53,6 +56,7 @@ int sv_currentPixel = 0;
 bool ips_rendering_frame = false;
 bool rendering_intro = false;
 
+// Function definitions.
 void draw_intro_screen();
 void wait_for_sv_boot();
 void start_rendering_ips();
@@ -131,6 +135,7 @@ void loop() {
 }
 
 //////////////////////////////////////////////////////////////////////////
+// Draws the custom intro screen into the framebuffer.
 void draw_intro_screen() {
   for (int i = 0; i < 160; i++) {
     for (int j = 0; j < 144; j++) {
@@ -181,17 +186,21 @@ void wait_for_sv_boot() {
       return;
     }
 
+    // Valid boot state.
+    // Start the main loop to capture the Supervision LCD data and write it to the IPS screen.
     sv_wait_for_boot = false;
   }
 }
 
 //////////////////////////////////////////////////////////////////////////
+// Start the timers to render one frame to the IPS screen.
 void start_rendering_ips() {
   ips_rendering_frame = true;
   ips_vsync1_start();
 }
 
 //////////////////////////////////////////////////////////////////////////
+// Sends the framebuffer to the IPS screen one pixel at a time.
 void render_ips_frame(bool pulse_clock) {
   if (ips_currentPixel >= 160) {
     return;
@@ -214,6 +223,7 @@ void render_ips_frame(bool pulse_clock) {
 }
 
 //////////////////////////////////////////////////////////////////////////
+// Capture the Supervision LCD data and store it into the framebuffer.
 void capture_sv_frame() {
   uint8_t sv_pixel_clock = digitalReadFast(PIN_SV_PIXEL_CLOCK);
   uint8_t sv_line_latch = digitalReadFast(PIN_SV_LINE_LATCH);
